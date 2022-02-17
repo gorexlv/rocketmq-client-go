@@ -19,14 +19,15 @@ package internal
 
 import (
 	"context"
-	"github.com/apache/rocketmq-client-go/v2/errors"
+	"fmt"
 	"math/rand"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/apache/rocketmq-client-go/v2/errors"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/tidwall/gjson"
@@ -192,9 +193,9 @@ func (s *namesrvs) UpdateTopicRouteInfoWithDefault(topic string, defaultTopic st
 			rlog.LogKeyValueChangedFrom: oldRouteData,
 			rlog.LogKeyValueChangedTo:   routeData.String(),
 		})
-		for _, brokerData := range routeData.BrokerDataList {
-			s.brokerAddressesMap.Store(brokerData.BrokerName, brokerData)
-		}
+
+		fmt.Printf("1234 = %v\n", routeData)
+		s.AddBroker(routeData)
 	}
 
 	return routeData.clone(), changed, nil
@@ -229,6 +230,27 @@ func (s *namesrvs) FindBrokerAddrByTopic(topic string) string {
 		}
 	}
 	return addr
+}
+
+func (s *namesrvs) BrokerClusterInfo(clusterName string) (map[string]BrokerData, error) {
+	return s.queryBrokers(clusterName)
+}
+
+func (s *namesrvs) BrokerAddrList(clusterName string) []string {
+	items, err := s.queryBrokers(clusterName)
+	if err != nil {
+		return []string{}
+	}
+
+	var addresses = []string{}
+	for _, data := range items {
+		address, ok := data.BrokerAddresses[MasterId]
+		if !ok {
+			continue
+		}
+		addresses = append(addresses, address)
+	}
+	return addresses
 }
 
 func (s *namesrvs) FindBrokerAddrByName(brokerName string) string {
@@ -373,6 +395,81 @@ func (s *namesrvs) findBrokerVersion(brokerName, brokerAddr string) int32 {
 	}
 
 	return versions[brokerAddr]
+}
+
+func (s *namesrvs) GetBrokerClusterInfo(clusterName string) (map[string]BrokerData, error) {
+	return s.queryBrokers(clusterName)
+}
+
+func (s *namesrvs) queryBrokers(clusterName string) (map[string]BrokerData, error) {
+	request := &GetRouteInfoRequestHeader{}
+
+	var (
+		response *remote.RemotingCommand
+		err      error
+	)
+	//if s.Size() == 0, response will be nil, lead to panic below.
+	if s.Size() == 0 {
+		rlog.Error("namesrv list empty. UpdateNameServerAddress should be called first.", map[string]interface{}{
+			"namesrv": s,
+		})
+		return nil, primitive.NewRemotingErr("namesrv list empty")
+	}
+	for i := 0; i < s.Size(); i++ {
+		rc := remote.NewRemotingCommand(ReqGetBrokerClusterInfo, request, nil)
+		ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+		response, err = s.nameSrvClient.InvokeSync(ctx, s.getNameServerAddress(), rc)
+
+		if err == nil {
+			cancel()
+			break
+		}
+		cancel()
+	}
+	if err != nil {
+		rlog.Error("connect to namesrv failed.", map[string]interface{}{
+			"namesrv": s,
+		})
+		return nil, primitive.NewRemotingErr(err.Error())
+	}
+
+	fmt.Printf("response = %v\n", string(response.Body))
+
+	switch response.Code {
+	case ResSuccess:
+		if response.Body == nil {
+			return nil, primitive.NewMQClientErr(response.Code, response.Remark)
+		}
+		var routeData BrokerClusterData
+
+		if err = routeData.decode(string(response.Body)); err != nil {
+			// if err := json.Unmarshal(response.Body, &routeData); err != nil {
+			rlog.Warning("decode TopicRouteData error: %s", map[string]interface{}{
+				rlog.LogKeyUnderlayError: err,
+			})
+			return nil, err
+		}
+
+		brokers, ok := routeData.ClusterAddrTable[clusterName]
+		if !ok {
+			return nil, fmt.Errorf("not found cluster name: %v", clusterName)
+		}
+
+		var ret = make(map[string]BrokerData)
+		for _, brokerName := range brokers {
+			info, ok := routeData.BrokerAddrTable[brokerName]
+			if !ok {
+				continue
+			}
+
+			ret[brokerName] = info
+		}
+		return ret, nil
+	case ResTopicNotExist:
+		return nil, errors.ErrTopicNotExist
+	default:
+		return nil, primitive.NewMQClientErr(response.Code, response.Remark)
+	}
 }
 
 func (s *namesrvs) queryTopicRouteInfoFromServer(topic string) (*TopicRouteData, error) {
@@ -540,19 +637,17 @@ func (routeData *TopicRouteData) decode(data string) error {
 		bd := &BrokerData{
 			BrokerName:      v.Get("brokerName").String(),
 			Cluster:         v.Get("cluster").String(),
-			BrokerAddresses: make(map[int64]string, 0),
+			BrokerAddresses: make(map[int64]string),
 		}
 		addrs := v.Get("brokerAddrs").String()
 		strs := strings.Split(addrs[1:len(addrs)-1], ",")
-		if strs != nil {
-			for _, str := range strs {
-				i := strings.Index(str, ":")
-				if i < 0 {
-					continue
-				}
-				id, _ := strconv.ParseInt(str[0:i], 10, 64)
-				bd.BrokerAddresses[id] = strings.Replace(str[i+1:], "\"", "", -1)
+		for _, str := range strs {
+			i := strings.Index(str, ":")
+			if i < 0 {
+				continue
 			}
+			id, _ := strconv.ParseInt(str[0:i], 10, 64)
+			bd.BrokerAddresses[id] = strings.Replace(str[i+1:], "\"", "", -1)
 		}
 		routeData.BrokerDataList[idx] = bd
 	}
@@ -639,10 +734,10 @@ func (q *QueueData) Equals(qd *QueueData) bool {
 
 // BrokerData BrokerData
 type BrokerData struct {
-	Cluster             string           `json:"cluster"`
-	BrokerName          string           `json:"brokerName"`
-	BrokerAddresses     map[int64]string `json:"brokerAddrs"`
-	brokerAddressesLock sync.RWMutex
+	Cluster         string           `json:"cluster"`
+	BrokerName      string           `json:"brokerName"`
+	BrokerAddresses map[int64]string `json:"brokerAddrs"`
+	// brokerAddressesLock sync.RWMutex
 }
 
 func (b *BrokerData) Equals(bd *BrokerData) bool {

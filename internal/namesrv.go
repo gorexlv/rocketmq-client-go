@@ -56,11 +56,15 @@ type Namesrvs interface {
 
 	FindBrokerAddrByName(brokerName string) string
 
+	BrokerAddrList(clusterName string) []string
+
 	FindBrokerAddressInSubscribe(brokerName string, brokerId int64, onlyThisBroker bool) *FindBrokerResult
 
 	FetchSubscribeMessageQueues(topic string) ([]*primitive.MessageQueue, error)
 
 	AddrList() []string
+
+	GetBrokerClusterInfo(clusterName string) (map[string]BrokerData, error)
 }
 
 // namesrvs rocketmq namesrv instance.
@@ -124,7 +128,7 @@ func NewNamesrv(resolver primitive.NsResolver) (*namesrvs, error) {
 		srvs:             addr,
 		lock:             new(sync.Mutex),
 		nameSrvClient:    nameSrvClient,
-		brokerVersionMap: make(map[string]map[string]int32, 0),
+		brokerVersionMap: make(map[string]map[string]int32),
 		brokerLock:       new(sync.RWMutex),
 		resolver:         resolver,
 	}, nil

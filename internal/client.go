@@ -21,13 +21,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	errors2 "github.com/apache/rocketmq-client-go/v2/errors"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	errors2 "github.com/apache/rocketmq-client-go/v2/errors"
 
 	"github.com/apache/rocketmq-client-go/v2/internal/remote"
 	"github.com/apache/rocketmq-client-go/v2/internal/utils"
@@ -187,9 +188,6 @@ func GetOrNewRocketMQClient(option ClientOptions, callbackCh chan interface{}) R
 		done:         make(chan struct{}),
 	}
 	actual, loaded := clientMap.LoadOrStore(client.ClientID(), client)
-	client.namesrvs = GetOrSetNamesrv(client.ClientID(), client.namesrvs)
-	client.namesrvs.bundleClient = actual.(*rmqClient)
-	client.option.Namesrv = client.namesrvs
 	if !loaded {
 		client.remoteClient.RegisterRequestFunc(ReqNotifyConsumerIdsChanged, func(req *remote.RemotingCommand, addr net.Addr) *remote.RemotingCommand {
 			rlog.Info("receive broker's notification to consumer group", map[string]interface{}{
@@ -306,6 +304,13 @@ func GetOrNewRocketMQClient(option ClientOptions, callbackCh chan interface{}) R
 			return nil
 		})
 	}
+
+	fmt.Printf("client.namesrvs = %v\n", client.namesrvs)
+	fmt.Printf("client.ClientID() = %v\n", client.ClientID())
+	client.namesrvs = GetOrSetNamesrv(client.ClientID(), client.namesrvs)
+	client.namesrvs.bundleClient = actual.(*rmqClient)
+	fmt.Printf("client.namesrvs = %v\n", client.namesrvs)
+	client.option.Namesrv = client.namesrvs
 	return actual.(*rmqClient)
 }
 

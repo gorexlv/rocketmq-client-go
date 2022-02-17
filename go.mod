@@ -10,8 +10,11 @@ require (
 	github.com/sirupsen/logrus v1.4.1
 	github.com/smartystreets/goconvey v1.6.4
 	github.com/stathat/consistent v1.0.0
-	github.com/stretchr/testify v1.3.0
+	github.com/stretchr/testify v1.7.0
 	github.com/tidwall/gjson v1.8.1
-	go.uber.org/atomic v1.5.1
+	go.uber.org/atomic v1.7.0
+	go.uber.org/multierr v1.7.0
+	golang.org/x/lint v0.0.0-20190930215403-16217165b5de // indirect
+	golang.org/x/tools v0.0.0-20191029041327-9cc4af7d6b2c // indirect
 	stathat.com/c/consistent v1.0.0 // indirect
 )

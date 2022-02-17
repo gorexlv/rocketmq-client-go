@@ -370,6 +370,7 @@ type CreateTopicRequestHeader struct {
 	TopicFilterType string
 	TopicSysFlag    int
 	Order           bool
+	ClusterName     string
 }
 
 func (request *CreateTopicRequestHeader) Encode() map[string]string {

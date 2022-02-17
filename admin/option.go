@@ -40,9 +40,16 @@ type TopicConfigCreate struct {
 	TopicFilterType string
 	TopicSysFlag    int
 	Order           bool
+	ClusterName     string
 }
 
 type OptionCreate func(*TopicConfigCreate)
+
+func WithCluster2Name(clusterName string) OptionCreate {
+	return func(opts *TopicConfigCreate) {
+		opts.ClusterName = clusterName
+	}
+}
 
 func WithTopicCreate(Topic string) OptionCreate {
 	return func(opts *TopicConfigCreate) {

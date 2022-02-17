@@ -34,6 +34,7 @@ const (
 	LogKeyValueChangedTo   = "changeTo"
 	LogKeyPullRequest      = "PullRequest"
 	LogKeyTimeStamp        = "timestamp"
+	LogKeyCluster          = "cluster"
 )
 
 type Logger interface {
