@@ -20,46 +20,23 @@ package admin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/apache/rocketmq-client-go/v2/internal"
 	"github.com/apache/rocketmq-client-go/v2/internal/remote"
-	"github.com/apache/rocketmq-client-go/v2/primitive"
 	"github.com/apache/rocketmq-client-go/v2/rlog"
 	"go.uber.org/multierr"
 )
 
 type Admin interface {
-	CreateTopic(ctx context.Context, opts ...OptionCreate) error
-	DeleteTopic(ctx context.Context, opts ...OptionDelete) error
-	//TODO
-	//TopicList(ctx context.Context, mq *primitive.MessageQueue) (*remote.RemotingCommand, error)
+	CreateTopic(ctx context.Context, opts *createTopicOptions) error
+	DeleteTopic(ctx context.Context, opts *deleteTopicOptions) error
+	ListTopics(ctx context.Context, opts *listTopicsOptions) ([]string, error)
+
 	GetBrokerClusterInfo(ctx context.Context, clusterName string) (map[string]internal.BrokerData, error)
 	Close() error
-}
-
-// TODO: move outdated context to ctx
-type adminOptions struct {
-	internal.ClientOptions
-}
-
-type AdminOption func(options *adminOptions)
-
-func defaultAdminOptions() *adminOptions {
-	opts := &adminOptions{
-		ClientOptions: internal.DefaultClientOptions(),
-	}
-	opts.GroupName = "TOOLS_ADMIN"
-	opts.InstanceName = time.Now().String()
-	return opts
-}
-
-// WithResolver nameserver resolver to fetch nameserver addr
-func WithResolver(resolver primitive.NsResolver) AdminOption {
-	return func(options *adminOptions) {
-		options.Resolver = resolver
-	}
 }
 
 type admin struct {
@@ -72,28 +49,51 @@ type admin struct {
 }
 
 // NewAdmin initialize admin
-func NewAdmin(opts ...AdminOption) (Admin, error) {
-	defaultOpts := defaultAdminOptions()
-	for _, opt := range opts {
-		opt(defaultOpts)
-	}
+func NewAdmin(opt *adminOptions) (Admin, error) {
+	return newAdmin(opt)
+}
 
-	namesrv, err := internal.NewNamesrv(defaultOpts.Resolver)
+func newAdmin(opts *adminOptions) (*admin, error) {
+	namesrv, err := internal.NewNamesrv(opts.Resolver)
 	if err != nil {
 		return nil, err
 	}
-	defaultOpts.Namesrv = namesrv
-	cli := internal.GetOrNewRocketMQClient(defaultOpts.ClientOptions, nil)
+	opts.Namesrv = namesrv
+	cli := internal.GetOrNewRocketMQClient(opts.ClientOptions, nil)
 	//log.Printf("Client: %#v", namesrv.srvs)
 	return &admin{
 		cli:     cli,
 		namesrv: namesrv,
-		opts:    defaultOpts,
+		opts:    opts,
 	}, nil
 }
 
-func (a *admin) ListTopics(ctx context.Context) error {
-	return nil
+func (a *admin) ListTopics(ctx context.Context, opts *listTopicsOptions) ([]string, error) {
+	if len(opts.NameSrvAddr) == 0 {
+		opts.NameSrvAddr = a.namesrv.AddrList()
+	}
+
+	var ret = make([]string, 0)
+	for _, nameSrvAddr := range opts.NameSrvAddr {
+		command, err := a.fetchAllTopicListFromNameServer(ctx, nameSrvAddr)
+		if err != nil {
+			rlog.Error("fetch topics in nameserver error", map[string]interface{}{
+				"nameServer":             nameSrvAddr,
+				rlog.LogKeyUnderlayError: err,
+			})
+			return nil, err
+		}
+		switch command.Code {
+		case internal.ResSuccess:
+			fmt.Printf("topics: %v\n", string(command.Body))
+		}
+	}
+	rlog.Info("fetch topics success", map[string]interface{}{
+		"nameServer":      opts.NameSrvAddr,
+		rlog.LogKeyBroker: opts.BrokerAddr,
+	})
+
+	return ret, nil
 }
 
 // Returns Broekr Cluster Info
@@ -104,32 +104,28 @@ func (a *admin) GetBrokerClusterInfo(ctx context.Context, clusterName string) (m
 
 // CreateTopic create topic.
 // TODO: another implementation like sarama, without brokerAddr as input
-func (a *admin) CreateTopic(ctx context.Context, opts ...OptionCreate) error {
-	cfg := defaultTopicConfigCreate()
-	for _, apply := range opts {
-		apply(&cfg)
-	}
+func (a *admin) CreateTopic(ctx context.Context, opts *createTopicOptions) error {
 	header := &internal.CreateTopicRequestHeader{
-		Topic:           cfg.Topic,
-		DefaultTopic:    cfg.DefaultTopic,
-		ReadQueueNums:   cfg.ReadQueueNums,
-		WriteQueueNums:  cfg.WriteQueueNums,
-		Perm:            cfg.Perm,
-		TopicFilterType: cfg.TopicFilterType,
-		TopicSysFlag:    cfg.TopicSysFlag,
-		Order:           cfg.Order,
+		Topic:           opts.Topic,
+		DefaultTopic:    opts.DefaultTopic,
+		ReadQueueNums:   opts.ReadQueueNums,
+		WriteQueueNums:  opts.WriteQueueNums,
+		Perm:            opts.Perm,
+		TopicFilterType: opts.TopicFilterType,
+		TopicSysFlag:    opts.TopicSysFlag,
+		Order:           opts.Order,
 	}
 
-	if cfg.BrokerAddr != "" {
-		return a.createTopicInBroker(ctx, cfg.BrokerAddr, header)
+	if opts.BrokerAddr != "" {
+		return a.createTopicInBroker(ctx, opts.BrokerAddr, header)
 	}
 
 	var merr error
-	if cfg.ClusterName != "" {
-		addresses := a.namesrv.BrokerAddrList(cfg.ClusterName)
+	if opts.ClusterName != "" {
+		addresses := a.namesrv.BrokerAddrList(opts.ClusterName)
 		if len(addresses) < 1 {
 			rlog.Error("empty broker address list", map[string]interface{}{
-				rlog.LogKeyCluster: cfg.ClusterName,
+				rlog.LogKeyCluster: opts.ClusterName,
 			})
 			return errors.New("empty broker address list")
 		}
@@ -143,52 +139,48 @@ func (a *admin) CreateTopic(ctx context.Context, opts ...OptionCreate) error {
 }
 
 // DeleteTopic delete topic in both broker and nameserver.
-func (a *admin) DeleteTopic(ctx context.Context, opts ...OptionDelete) error {
-	cfg := defaultTopicConfigDelete()
-	for _, apply := range opts {
-		apply(&cfg)
-	}
+func (a *admin) DeleteTopic(ctx context.Context, opts *deleteTopicOptions) error {
 	//delete topic in broker
-	if cfg.BrokerAddr == "" {
-		a.namesrv.UpdateTopicRouteInfo(cfg.Topic)
-		cfg.BrokerAddr = a.namesrv.FindBrokerAddrByTopic(cfg.Topic)
+	if opts.BrokerAddr == "" {
+		a.namesrv.UpdateTopicRouteInfo(opts.Topic)
+		opts.BrokerAddr = a.namesrv.FindBrokerAddrByTopic(opts.Topic)
 	}
 
-	if _, err := a.deleteTopicInBroker(ctx, cfg.Topic, cfg.BrokerAddr); err != nil {
+	if _, err := a.deleteTopicInBroker(ctx, opts.Topic, opts.BrokerAddr); err != nil {
 		rlog.Error("delete topic in broker error", map[string]interface{}{
-			rlog.LogKeyTopic:         cfg.Topic,
-			rlog.LogKeyBroker:        cfg.BrokerAddr,
+			rlog.LogKeyTopic:         opts.Topic,
+			rlog.LogKeyBroker:        opts.BrokerAddr,
 			rlog.LogKeyUnderlayError: err,
 		})
 		return err
 	}
 
 	//delete topic in nameserver
-	if len(cfg.NameSrvAddr) == 0 {
-		_, _, err := a.namesrv.UpdateTopicRouteInfo(cfg.Topic)
+	if len(opts.NameSrvAddr) == 0 {
+		_, _, err := a.namesrv.UpdateTopicRouteInfo(opts.Topic)
 		if err != nil {
 			rlog.Error("delete topic in nameserver error", map[string]interface{}{
-				rlog.LogKeyTopic:         cfg.Topic,
+				rlog.LogKeyTopic:         opts.Topic,
 				rlog.LogKeyUnderlayError: err,
 			})
 		}
-		cfg.NameSrvAddr = a.namesrv.AddrList()
+		opts.NameSrvAddr = a.namesrv.AddrList()
 	}
 
-	for _, nameSrvAddr := range cfg.NameSrvAddr {
-		if _, err := a.deleteTopicInNameServer(ctx, cfg.Topic, nameSrvAddr); err != nil {
+	for _, nameSrvAddr := range opts.NameSrvAddr {
+		if _, err := a.deleteTopicInNameServer(ctx, opts.Topic, nameSrvAddr); err != nil {
 			rlog.Error("delete topic in nameserver error", map[string]interface{}{
 				"nameServer":             nameSrvAddr,
-				rlog.LogKeyTopic:         cfg.Topic,
+				rlog.LogKeyTopic:         opts.Topic,
 				rlog.LogKeyUnderlayError: err,
 			})
 			return err
 		}
 	}
 	rlog.Info("delete topic success", map[string]interface{}{
-		"nameServer":      cfg.NameSrvAddr,
-		rlog.LogKeyTopic:  cfg.Topic,
-		rlog.LogKeyBroker: cfg.BrokerAddr,
+		"nameServer":      opts.NameSrvAddr,
+		rlog.LogKeyTopic:  opts.Topic,
+		rlog.LogKeyBroker: opts.BrokerAddr,
 	})
 	return nil
 }
@@ -216,6 +208,16 @@ func (a *admin) createTopicInBroker(ctx context.Context, brokerAddr string, head
 		})
 	}
 	return err
+}
+
+func (a *admin) fetchAllTopicListFromNameServer(ctx context.Context, nameSrvAddr string) (*remote.RemotingCommand, error) {
+	cmd := remote.NewRemotingCommand(internal.ReqGetAllTopicListFromNameServer, nil, nil)
+	return a.cli.InvokeSync(ctx, nameSrvAddr, cmd, 5*time.Second)
+}
+
+func (a *admin) getBrokerClusterInfo(ctx context.Context, cluster string, nameSrvAddr string) (*remote.RemotingCommand, error) {
+	cmd := remote.NewRemotingCommand(internal.ReqGetBrokerClusterInfo, nil, nil)
+	return a.cli.InvokeSync(ctx, nameSrvAddr, cmd, 5*time.Second)
 }
 
 // DeleteTopicInBroker delete topic in broker.

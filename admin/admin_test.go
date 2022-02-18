@@ -1,34 +1,83 @@
-package admin_test
+package admin
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
-	"github.com/apache/rocketmq-client-go/v2/admin"
 	"github.com/apache/rocketmq-client-go/v2/primitive"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAdmin(t *testing.T) {
-	// nameSrvAddr := []string{"127.0.0.1:9876"}
-	nameSrvAddr := []string{"10.1.41.171:9876"}
-	// topic := "newOne"
+func TestAdmin_CreateTopic(t *testing.T) {
+	nameSrvAddr := []string{"127.0.0.1:9876"}
+	topic := "newOne"
+	clusterName := "DefaultCluster"
 	// brokerAddr := "127.0.0.1:10911"
 	// brokerAddr := "10.238.63.24:10911"
 
-	testAdmin, err := admin.NewAdmin(admin.WithResolver(primitive.NewPassthroughResolver(nameSrvAddr)))
+	testAdmin, err := newAdmin(AdminOptions().WithResolver(primitive.NewPassthroughResolver(nameSrvAddr)))
 	if err != nil {
 		t.Errorf("new admin: %v", err)
 	}
 	assert.Nil(t, err)
 	defer testAdmin.Close()
 
-	testAdmin.CreateTopic(
-		context.Background(),
-		admin.WithTopicCreate("newOne4"),
-		admin.WithCluster2Name("DefaultCluster"),
-		// admin.WithBrokerAddrCreate(brokerAddr),
-	)
+	options := CreateTopicOptions()
+	options.Topic = topic
+	options.ClusterName = clusterName
+	if err := testAdmin.CreateTopic(context.Background(), options); err != nil {
+		t.Errorf("new admin: %v\n", err)
+	}
+}
 
-	// testAdmin.ListTopics()
+func TestMain_ListTopics(t *testing.T) {
+	nameSrvAddr := []string{"127.0.0.1:9876"}
+	clusterName := "DefaultCluster"
+	// brokerAddr := "127.0.0.1:10911"
+	// brokerAddr := "10.238.63.24:10911"
+
+	testAdmin, err := newAdmin(AdminOptions().WithPassthroughResolver(nameSrvAddr))
+	if err != nil {
+		t.Errorf("new admin: %v", err)
+	}
+	assert.Nil(t, err)
+	defer testAdmin.Close()
+
+	options := ListTopicOptions()
+	options.ClusterName = clusterName
+	if topics, err := testAdmin.ListTopics(context.Background(), options); err != nil {
+		t.Errorf("new admin: %v\n", err)
+	} else {
+		t.Logf("new admin: %v\n", topics)
+	}
+}
+
+func TestAdmin_getBrokerClusterInfo(t *testing.T) {
+	nameSrvAddr := []string{"127.0.0.1:9876"}
+	clusterName := "DefaultCluster"
+	testAdmin, err := newAdmin(AdminOptions().WithPassthroughResolver(nameSrvAddr))
+	if err != nil {
+		t.Errorf("new admin: %v", err)
+	}
+	assert.Nil(t, err)
+	defer testAdmin.Close()
+
+	command, err := testAdmin.getBrokerClusterInfo(context.Background(), clusterName, nameSrvAddr[0])
+	assert.Nil(t, err)
+	fmt.Printf("command = %v\n", string(command.Body))
+}
+
+func TestAdmin_fetchAllTopicListFromNameServer(t *testing.T) {
+	nameSrvAddr := []string{"127.0.0.1:9876"}
+	testAdmin, err := newAdmin(AdminOptions().WithPassthroughResolver(nameSrvAddr))
+	if err != nil {
+		t.Errorf("new admin: %v", err)
+	}
+	assert.Nil(t, err)
+	defer testAdmin.Close()
+
+	command, err := testAdmin.fetchAllTopicListFromNameServer(context.Background(), nameSrvAddr[0])
+	assert.Nil(t, err)
+	fmt.Printf("command = %v\n", string(command.Body))
 }

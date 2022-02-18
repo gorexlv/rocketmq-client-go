@@ -49,6 +49,7 @@ const (
 	ReqDeleteTopicInBroker           = int16(215)
 	ReqDeleteTopicInNameSrv          = int16(216)
 	ReqResetConsumerOffset           = int16(220)
+	ReqGetTopicsByCluster            = int16(224)
 	ReqGetConsumerRunningInfo        = int16(307)
 	ReqConsumeMessageDirectly        = int16(309)
 )

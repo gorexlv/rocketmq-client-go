@@ -305,11 +305,8 @@ func GetOrNewRocketMQClient(option ClientOptions, callbackCh chan interface{}) R
 		})
 	}
 
-	fmt.Printf("client.namesrvs = %v\n", client.namesrvs)
-	fmt.Printf("client.ClientID() = %v\n", client.ClientID())
 	client.namesrvs = GetOrSetNamesrv(client.ClientID(), client.namesrvs)
 	client.namesrvs.bundleClient = actual.(*rmqClient)
-	fmt.Printf("client.namesrvs = %v\n", client.namesrvs)
 	client.option.Namesrv = client.namesrvs
 	return actual.(*rmqClient)
 }
