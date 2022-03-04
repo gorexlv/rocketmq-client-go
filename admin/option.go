@@ -149,3 +149,22 @@ func (opts *listTopicsOptions) WithNameServerAddrs(addrs []string) *listTopicsOp
 func ListTopicOptions() *listTopicsOptions {
 	return &listTopicsOptions{}
 }
+
+type createSubscriptionGroupOptions struct {
+	GroupName                    string
+	ConsumeEnable                bool
+	ConsumeBroadcastEnable       bool
+	ConsumeFromMinEnable         bool
+	RetryQueueNums               int
+	RetryMaxTimes                int
+	WhichBrokerWhenConsumeSlowly int64
+	BrokerAddr                   string
+	ClusterName                  string
+}
+
+func CreateSubscriptionGroupOptions() *createSubscriptionGroupOptions {
+	return &createSubscriptionGroupOptions{
+		ConsumeFromMinEnable:   false,
+		ConsumeBroadcastEnable: false,
+	}
+}

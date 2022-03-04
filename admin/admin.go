@@ -34,6 +34,7 @@ type Admin interface {
 	CreateTopic(ctx context.Context, opts *createTopicOptions) error
 	DeleteTopic(ctx context.Context, opts *deleteTopicOptions) error
 	ListTopics(ctx context.Context, opts *listTopicsOptions) ([]string, error)
+	CreateAndUpdateSubscriptionGroupConfig(ctx context.Context, opts *createSubscriptionGroupOptions) error
 
 	GetBrokerClusterInfo(ctx context.Context, clusterName string) (map[string]internal.BrokerData, error)
 	Close() error
@@ -120,21 +121,39 @@ func (a *admin) CreateTopic(ctx context.Context, opts *createTopicOptions) error
 		return a.createTopicInBroker(ctx, opts.BrokerAddr, header)
 	}
 
-	var merr error
 	if opts.ClusterName != "" {
-		addresses := a.namesrv.BrokerAddrList(opts.ClusterName)
-		if len(addresses) < 1 {
-			rlog.Error("empty broker address list", map[string]interface{}{
-				rlog.LogKeyCluster: opts.ClusterName,
-			})
-			return errors.New("empty broker address list")
-		}
-
-		for _, address := range addresses {
-			merr = multierr.Append(merr, a.createTopicInBroker(ctx, address, header))
-		}
+		return a.eachBroker(ctx, opts.ClusterName, func(addr string) error {
+			return a.createTopicInBroker(ctx, addr, header)
+		})
 	}
 
+	return nil
+}
+
+func (a *admin) CreateAndUpdateSubscriptionGroupConfig(ctx context.Context, opts *createSubscriptionGroupOptions) error {
+	header := &internal.SubscriptionGroupConfigHeader{
+		GroupName:                    opts.GroupName,
+		ConsumeEnable:                opts.ConsumeEnable,
+		ConsumeFromMinEnable:         opts.ConsumeFromMinEnable,
+		ConsumeBroadcastEnable:       opts.ConsumeBroadcastEnable,
+		RetryQueueNums:               opts.RetryQueueNums,
+		RetryMaxTimes:                opts.RetryMaxTimes,
+		WhichBrokerWhenConsumeSlowly: opts.WhichBrokerWhenConsumeSlowly,
+	}
+
+	if opts.BrokerAddr != "" {
+		return a.createAndUpdateSubscriptionGroupConfig(ctx, opts.BrokerAddr, header)
+	}
+
+	if opts.ClusterName != "" {
+		return a.eachBroker(ctx, opts.ClusterName, func(addr string) error {
+			return a.createAndUpdateSubscriptionGroupConfig(ctx, addr, header)
+		})
+	}
+	return nil
+}
+
+func (a *admin) createAndUpdateSubscriptionGroupConfig(ctx context.Context, addr string, header *internal.SubscriptionGroupConfigHeader) error {
 	return nil
 }
 
@@ -238,4 +257,20 @@ func (a *admin) deleteTopicInNameServer(ctx context.Context, topic string, nameS
 
 	cmd := remote.NewRemotingCommand(internal.ReqDeleteTopicInNameSrv, request, nil)
 	return a.cli.InvokeSync(ctx, nameSrvAddr, cmd, 5*time.Second)
+}
+
+func (a *admin) eachBroker(ctx context.Context, clusterName string, exec func(string) error) error {
+	var merr error
+	addresses := a.namesrv.BrokerAddrList(clusterName)
+	if len(addresses) > 0 {
+		rlog.Error("empth broker address list", map[string]interface{}{
+			rlog.LogKeyCluster: clusterName,
+		})
+		return errors.New("empty broker address list")
+	}
+
+	for _, addr := range addresses {
+		merr = multierr.Append(merr, exec(addr))
+	}
+	return merr
 }

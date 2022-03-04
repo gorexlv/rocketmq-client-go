@@ -480,3 +480,28 @@ func (request *ConsumeMessageDirectlyHeader) Decode(properties map[string]string
 		request.brokerName = v
 	}
 }
+
+type SubscriptionGroupConfigHeader struct {
+	GroupName              string
+	ConsumeEnable          bool
+	ConsumeFromMinEnable   bool
+	ConsumeBroadcastEnable bool
+	RetryQueueNums         int
+	RetryMaxTimes          int
+	// TODO(lvchao)
+	// brokerId                     int64
+	WhichBrokerWhenConsumeSlowly int64
+}
+
+func (request *SubscriptionGroupConfigHeader) Encode() map[string]string {
+	maps := make(map[string]string)
+	maps["groupName"] = request.GroupName
+	maps["consumeEnable"] = strconv.FormatBool(request.ConsumeEnable)
+	maps["consumeFromMinEnable"] = strconv.FormatBool(request.ConsumeFromMinEnable)
+	maps["consumeBroadcastEnable"] = strconv.FormatBool(request.ConsumeBroadcastEnable)
+	maps["retryQueueNums"] = strconv.FormatInt(int64(request.RetryQueueNums), 10)
+	maps["restryMaxTimes"] = strconv.FormatInt(int64(request.RetryMaxTimes), 10)
+	// maps["brokerId"] = request.brokerId
+	maps["whichBrokerWhenConsumeSlowly"] = strconv.FormatInt(request.WhichBrokerWhenConsumeSlowly, 10)
+	return maps
+}
