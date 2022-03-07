@@ -501,8 +501,8 @@ func (request *SubscriptionGroupConfigHeader) Encode() map[string]string {
 	maps["consumeFromMinEnable"] = strconv.FormatBool(request.ConsumeFromMinEnable)
 	maps["consumeBroadcastEnable"] = strconv.FormatBool(request.ConsumeBroadcastEnable)
 	maps["retryQueueNums"] = fmt.Sprintf("%d", request.RetryQueueNums)
-	// maps["restryMaxTimes"] = strconv.FormatInt(int64(request.RetryMaxTimes), 10)
-	maps["brokerId"] = "0"
+	maps["restryMaxTimes"] = strconv.FormatInt(int64(request.RetryMaxTimes), 10)
+	maps["brokerId"] = fmt.Sprintf("%d", MasterId)
 	maps["whichBrokerWhenConsumeSlowly"] = fmt.Sprintf("%d", request.WhichBrokerWhenConsumeSlowly)
 	fmt.Printf("subscription group config maps = %v\n", maps)
 	return maps

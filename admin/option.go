@@ -28,6 +28,7 @@ type adminOptions struct {
 	internal.ClientOptions
 }
 
+// AdminOptions represents adminOptions with default values
 func AdminOptions() *adminOptions {
 	opts := &adminOptions{
 		ClientOptions: internal.DefaultClientOptions(),
@@ -81,6 +82,7 @@ func (options *createTopicOptions) WithOrder(order bool) *createTopicOptions {
 	return options
 }
 
+// CreateTopicOptions represents createTopicOptions with default setting.
 func CreateTopicOptions() *createTopicOptions {
 	opts := &createTopicOptions{
 		DefaultTopic:    "defaultTopic",
@@ -120,6 +122,7 @@ func (options *deleteTopicOptions) WithNameServerAddrs(addrs []string) *deleteTo
 	return options
 }
 
+// DeleteTopicOptions represents deleteTopicOptions with default settings.
 func DeleteTopicOptions() *deleteTopicOptions {
 	opts := &deleteTopicOptions{}
 	return opts
@@ -146,6 +149,7 @@ func (opts *listTopicsOptions) WithNameServerAddrs(addrs []string) *listTopicsOp
 	return opts
 }
 
+// ListTopicOptions represents listTopicOptions with default values.
 func ListTopicOptions() *listTopicsOptions {
 	return &listTopicsOptions{}
 }
@@ -162,9 +166,24 @@ type createSubscriptionGroupOptions struct {
 	ClusterName                  string
 }
 
+// CreateSubscriptionGroupOptions represents createSubscriptionGroupOptions with default settings.
 func CreateSubscriptionGroupOptions() *createSubscriptionGroupOptions {
 	return &createSubscriptionGroupOptions{
-		ConsumeFromMinEnable:   false,
-		ConsumeBroadcastEnable: false,
+		ConsumeEnable:                true,
+		ConsumeFromMinEnable:         true,
+		ConsumeBroadcastEnable:       true,
+		RetryQueueNums:               1,
+		RetryMaxTimes:                16,
+		WhichBrokerWhenConsumeSlowly: 1,
 	}
+}
+
+func (opts *createSubscriptionGroupOptions) WithClusterName(clusterName string) *createSubscriptionGroupOptions {
+	opts.ClusterName = clusterName
+	return opts
+}
+
+func (opts *createSubscriptionGroupOptions) WithGroupName(groupName string) *createSubscriptionGroupOptions {
+	opts.GroupName = groupName
+	return opts
 }
