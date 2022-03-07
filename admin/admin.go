@@ -87,6 +87,8 @@ func (a *admin) ListTopics(ctx context.Context, opts *listTopicsOptions) ([]stri
 		switch command.Code {
 		case internal.ResSuccess:
 			fmt.Printf("topics: %v\n", string(command.Body))
+		case internal.ResError:
+			return nil, fmt.Errorf("list topics falid: %w", err)
 		}
 	}
 	rlog.Info("fetch topics success", map[string]interface{}{
@@ -138,6 +140,7 @@ func (a *admin) CreateAndUpdateSubscriptionGroupConfig(ctx context.Context, opts
 		ConsumeBroadcastEnable:       opts.ConsumeBroadcastEnable,
 		RetryQueueNums:               opts.RetryQueueNums,
 		RetryMaxTimes:                opts.RetryMaxTimes,
+		BrokerID:                     0,
 		WhichBrokerWhenConsumeSlowly: opts.WhichBrokerWhenConsumeSlowly,
 	}
 
@@ -150,10 +153,6 @@ func (a *admin) CreateAndUpdateSubscriptionGroupConfig(ctx context.Context, opts
 			return a.createAndUpdateSubscriptionGroupConfig(ctx, addr, header)
 		})
 	}
-	return nil
-}
-
-func (a *admin) createAndUpdateSubscriptionGroupConfig(ctx context.Context, addr string, header *internal.SubscriptionGroupConfigHeader) error {
 	return nil
 }
 
@@ -211,6 +210,26 @@ func (a *admin) Close() error {
 	return nil
 }
 
+func (a *admin) createAndUpdateSubscriptionGroupConfig(ctx context.Context, addr string, header *internal.SubscriptionGroupConfigHeader) (err error) {
+	cmd := remote.NewRemotingCommand(internal.ReqUpdateAndCreateSubscriptionGroup, nil, header.ToJSON())
+	cmd, err = a.cli.InvokeSync(ctx, addr, cmd, 5*time.Second)
+	if err != nil {
+		rlog.Error("create subscription group error", map[string]interface{}{
+			rlog.LogKeyUnderlayError: err,
+		})
+		return
+	} else {
+		rlog.Info("create subscription group success", map[string]interface{}{})
+	}
+	switch cmd.Code {
+	case internal.ResSuccess:
+		return nil
+	case internal.ResError:
+		return fmt.Errorf("createAndUpdateSubscriptionGroupConfig failed: %s", cmd.Remark)
+	}
+	return nil
+}
+
 func (a *admin) createTopicInBroker(ctx context.Context, brokerAddr string, header *internal.CreateTopicRequestHeader) error {
 	cmd := remote.NewRemotingCommand(internal.ReqCreateTopic, header, nil)
 	_, err := a.cli.InvokeSync(ctx, brokerAddr, cmd, 5*time.Second)
@@ -262,7 +281,7 @@ func (a *admin) deleteTopicInNameServer(ctx context.Context, topic string, nameS
 func (a *admin) eachBroker(ctx context.Context, clusterName string, exec func(string) error) error {
 	var merr error
 	addresses := a.namesrv.BrokerAddrList(clusterName)
-	if len(addresses) > 0 {
+	if len(addresses) == 0 {
 		rlog.Error("empth broker address list", map[string]interface{}{
 			rlog.LogKeyCluster: clusterName,
 		})

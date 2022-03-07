@@ -194,7 +194,6 @@ func (s *namesrvs) UpdateTopicRouteInfoWithDefault(topic string, defaultTopic st
 			rlog.LogKeyValueChangedTo:   routeData.String(),
 		})
 
-		fmt.Printf("1234 = %v\n", routeData)
 		s.AddBroker(routeData)
 	}
 
@@ -432,8 +431,6 @@ func (s *namesrvs) queryBrokers(clusterName string) (map[string]BrokerData, erro
 		})
 		return nil, primitive.NewRemotingErr(err.Error())
 	}
-
-	fmt.Printf("response = %v\n", string(response.Body))
 
 	switch response.Code {
 	case ResSuccess:

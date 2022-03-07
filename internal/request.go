@@ -18,40 +18,42 @@ limitations under the License.
 package internal
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
 )
 
 const (
-	ReqSendMessage                   = int16(10)
-	ReqPullMessage                   = int16(11)
-	ReqQueryMessage                  = int16(12)
-	ReqQueryConsumerOffset           = int16(14)
-	ReqUpdateConsumerOffset          = int16(15)
-	ReqCreateTopic                   = int16(17)
-	ReqSearchOffsetByTimestamp       = int16(29)
-	ReqGetMaxOffset                  = int16(30)
-	ReqGetMinOffset                  = int16(31)
-	ReqViewMessageByID               = int16(33)
-	ReqHeartBeat                     = int16(34)
-	ReqConsumerSendMsgBack           = int16(36)
-	ReqENDTransaction                = int16(37)
-	ReqGetConsumerListByGroup        = int16(38)
-	ReqLockBatchMQ                   = int16(41)
-	ReqUnlockBatchMQ                 = int16(42)
-	ReqGetRouteInfoByTopic           = int16(105)
-	ReqGetBrokerClusterInfo          = int16(106)
-	ReqSendBatchMessage              = int16(320)
-	ReqCheckTransactionState         = int16(39)
-	ReqNotifyConsumerIdsChanged      = int16(40)
-	ReqGetAllTopicListFromNameServer = int16(206)
-	ReqDeleteTopicInBroker           = int16(215)
-	ReqDeleteTopicInNameSrv          = int16(216)
-	ReqResetConsumerOffset           = int16(220)
-	ReqGetTopicsByCluster            = int16(224)
-	ReqGetConsumerRunningInfo        = int16(307)
-	ReqConsumeMessageDirectly        = int16(309)
+	ReqSendMessage                      = int16(10)
+	ReqPullMessage                      = int16(11)
+	ReqQueryMessage                     = int16(12)
+	ReqQueryConsumerOffset              = int16(14)
+	ReqUpdateConsumerOffset             = int16(15)
+	ReqCreateTopic                      = int16(17)
+	ReqSearchOffsetByTimestamp          = int16(29)
+	ReqGetMaxOffset                     = int16(30)
+	ReqGetMinOffset                     = int16(31)
+	ReqViewMessageByID                  = int16(33)
+	ReqHeartBeat                        = int16(34)
+	ReqConsumerSendMsgBack              = int16(36)
+	ReqENDTransaction                   = int16(37)
+	ReqGetConsumerListByGroup           = int16(38)
+	ReqLockBatchMQ                      = int16(41)
+	ReqUnlockBatchMQ                    = int16(42)
+	ReqGetRouteInfoByTopic              = int16(105)
+	ReqGetBrokerClusterInfo             = int16(106)
+	ReqSendBatchMessage                 = int16(320)
+	ReqCheckTransactionState            = int16(39)
+	ReqNotifyConsumerIdsChanged         = int16(40)
+	ReqUpdateAndCreateSubscriptionGroup = int16(200)
+	ReqGetAllTopicListFromNameServer    = int16(206)
+	ReqDeleteTopicInBroker              = int16(215)
+	ReqDeleteTopicInNameSrv             = int16(216)
+	ReqResetConsumerOffset              = int16(220)
+	ReqGetTopicsByCluster               = int16(224)
+	ReqGetConsumerRunningInfo           = int16(307)
+	ReqConsumeMessageDirectly           = int16(309)
 )
 
 type SendMessageRequestHeader struct {
@@ -482,15 +484,14 @@ func (request *ConsumeMessageDirectlyHeader) Decode(properties map[string]string
 }
 
 type SubscriptionGroupConfigHeader struct {
-	GroupName              string
-	ConsumeEnable          bool
-	ConsumeFromMinEnable   bool
-	ConsumeBroadcastEnable bool
-	RetryQueueNums         int
-	RetryMaxTimes          int
-	// TODO(lvchao)
-	// brokerId                     int64
-	WhichBrokerWhenConsumeSlowly int64
+	GroupName                    string `json:"groupName" description:"groupName"`
+	ConsumeEnable                bool   `json:"consumeEnable" description:"consumeEnable"`
+	ConsumeFromMinEnable         bool   `json:"consumeFromMinEnable" description:"consumeFromMinEnable"`
+	ConsumeBroadcastEnable       bool   `json:"consumeBroadcastEnable" description:"consumeBroadcastEnable"`
+	RetryQueueNums               int    `json:"retryQueueNums" description:"retryQueueNums"`
+	RetryMaxTimes                int    `json:"retryMaxTimes" description:"retryMaxTimes"`
+	BrokerID                     int64  `json:"brokerId" description:"brokerId"`
+	WhichBrokerWhenConsumeSlowly int64  `json:"whichBrokerWhenConsumeSlowly" description:"whichBrokerWhenConsumeSlowly"`
 }
 
 func (request *SubscriptionGroupConfigHeader) Encode() map[string]string {
@@ -499,9 +500,15 @@ func (request *SubscriptionGroupConfigHeader) Encode() map[string]string {
 	maps["consumeEnable"] = strconv.FormatBool(request.ConsumeEnable)
 	maps["consumeFromMinEnable"] = strconv.FormatBool(request.ConsumeFromMinEnable)
 	maps["consumeBroadcastEnable"] = strconv.FormatBool(request.ConsumeBroadcastEnable)
-	maps["retryQueueNums"] = strconv.FormatInt(int64(request.RetryQueueNums), 10)
-	maps["restryMaxTimes"] = strconv.FormatInt(int64(request.RetryMaxTimes), 10)
-	// maps["brokerId"] = request.brokerId
-	maps["whichBrokerWhenConsumeSlowly"] = strconv.FormatInt(request.WhichBrokerWhenConsumeSlowly, 10)
+	maps["retryQueueNums"] = fmt.Sprintf("%d", request.RetryQueueNums)
+	// maps["restryMaxTimes"] = strconv.FormatInt(int64(request.RetryMaxTimes), 10)
+	maps["brokerId"] = "0"
+	maps["whichBrokerWhenConsumeSlowly"] = fmt.Sprintf("%d", request.WhichBrokerWhenConsumeSlowly)
+	fmt.Printf("subscription group config maps = %v\n", maps)
 	return maps
+}
+
+func (request *SubscriptionGroupConfigHeader) ToJSON() []byte {
+	bs, _ := json.Marshal(request)
+	return bs
 }

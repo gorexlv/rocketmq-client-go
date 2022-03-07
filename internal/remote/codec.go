@@ -146,6 +146,9 @@ func (command *RemotingCommand) WriteTo(w io.Writer) error {
 		header, err = rocketMqSerializer.encodeHeader(command)
 	}
 
+	fmt.Printf("codecType = %v\n", codecType)
+	fmt.Printf("header = %v\n", string(header))
+
 	if err != nil {
 		return err
 	}
