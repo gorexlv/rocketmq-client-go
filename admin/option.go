@@ -82,6 +82,16 @@ func (options *createTopicOptions) WithOrder(order bool) *createTopicOptions {
 	return options
 }
 
+func (options *createTopicOptions) WithReadQueueNum(num int) *createTopicOptions {
+	options.ReadQueueNums = num
+	return options
+}
+
+func (options *createTopicOptions) WithWriteQueueNum(num int) *createTopicOptions {
+	options.WriteQueueNums = num
+	return options
+}
+
 // CreateTopicOptions represents createTopicOptions with default setting.
 func CreateTopicOptions() *createTopicOptions {
 	opts := &createTopicOptions{
